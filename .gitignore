@@ -1,0 +1,20 @@
+# Node dependencies
+node_modules/
+
+# Python Virtual Environment
+tts/.venv/
+**/__pycache__/
+*.pyc
+tts/models/
+
+# Local Credentials & Sensitive tokens
+assets/json/token.json
+assets/json/credentials.json
+
+# Audio Outputs
+*.wav
+assets/audio/*.wav
+
+# OS files
+.DS_Store
+Thumbs.db

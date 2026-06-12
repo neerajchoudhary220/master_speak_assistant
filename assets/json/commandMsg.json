@@ -1,0 +1,26 @@
+{
+  "mails": {
+    "hi": [
+      {
+        "msg": "हेल्लो सर, अभी अभी एक नया ईमेल {$sender} की तरफ से आया है। मेल का समय है {$date}. धन्यवाद, आपका दिन शुभ हो"
+      }
+    ],
+    "en": [
+      {
+        "msg": "Hello Sir, a new email has arrived from {$sender}. The email date is {$date}. Thanks, Have a great day"
+      }
+    ]
+  },
+  "crypto": {
+    "hi": [
+      {
+        "msg": "हेल्लो सर, अभी अभी एक नया बिटकॉइन transaction आया है। Transaction का समय है {$time}"
+      }
+    ],
+    "en": [
+      {
+        "msg": "Hello Sir, a new Bitcoin transaction has arrived. The transaction time is {$time}."
+      }
+    ]
+  }
+}
