@@ -1,0 +1,10 @@
+{
+  "priorities": {
+    "voice": 0,
+    "speak": 0,
+    "crypto": 1,
+    "mail": 2,
+    "reminder": 3
+  },
+  "queue": []
+}

@@ -2,7 +2,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
-const { selectAudio } = require("../generate_audio_files/audio");
+const { selectAudio, selectAudioForReminder, selectAudioForSpeak, queueVoiceAudio, saveVoiceMessage, queueAudio } = require("../generate_audio_files/audio");
 const {
   getMexcSymbolDetails,
   formatMexcDetails,
@@ -10,6 +10,7 @@ const {
   getPricesForSymbols,
   getDefaultMarketDashboard,
 } = require("./crypto");
+const { clearQueueAndStop } = require("../controllers/streamcontroller");
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -35,14 +36,43 @@ const mainKeyboard = {
   keyboard: [
     [{ text: "➕ Add Alert" }, { text: "📋 List Alerts" }],
     [{ text: "💰 Check Price" }, { text: "⭐️ Fav Coins" }],
-    [{ text: "❓ Help" }],
+    [{ text: "⏰ Set Reminder" }, { text: "🎙️ Voice Reminder" }],
+    [{ text: "📋 List Reminders" }, { text: "🗣️ Speak Message" }],
+    [{ text: "🧹 Clear Queue" }, { text: "❓ Help" }],
   ],
   resize_keyboard: true,
 };
 
 // ─── DATABASE FUNCTIONS ───────────────────────────────────────────────────────
 
-const FAVORITES_FILE = path.join(__dirname, "favorites.json");
+const FAVORITES_FILE = path.join(__dirname, "../assets/json/favorites.json");
+const REMINDERS_FILE = path.join(__dirname, "../assets/json/reminders.json");
+
+function readReminders() {
+  try {
+    if (!fs.existsSync(REMINDERS_FILE)) {
+      fs.writeFileSync(REMINDERS_FILE, JSON.stringify([], null, 2));
+      return [];
+    }
+    const data = fs.readFileSync(REMINDERS_FILE, "utf8");
+    return JSON.parse(data);
+  } catch (error) {
+    console.error("Error reading reminders file:", error.message);
+    return [];
+  }
+}
+
+function writeReminders(reminders) {
+  try {
+    fs.writeFileSync(REMINDERS_FILE, JSON.stringify(reminders, null, 2));
+  } catch (error) {
+    console.error("Error writing reminders file:", error.message);
+  }
+}
+
+function clearAudioQueue() {
+  clearQueueAndStop();
+}
 
 function readFavorites() {
   try {
@@ -127,25 +157,80 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────
 
 function getHelpMessage() {
-  return `👋 *Welcome to the Crypto Price Alert Bot!*
-Aap yahan kisi bhi coin par dynamic triggers set kar sakte hain.
+  return `👋 *Welcome to your Personal Smart Assistant Bot!* 🤖✨
+Aap yahan real-time system alerts, multi-functional reminders, aur direct audio/voice streaming controls manage kar sakte hain.
 
-💡 *Commands:*
-➕ \`/add <COIN> <PRICE> [above/below]\` - Naya price trigger set karein
-   _Example:_ \`/add BTCUSDT 69000 above\` or \`/add SIREN 1.20 below\`
-📋 \`/list\` - Apne saare active triggers dekhein aur manage karein
-✏️ \`/edit <ID> <NEW_PRICE> [above/below]\` - Alert ki price change karein
-❌ \`/delete <ID>\` - Kisi alert ko delete karein
-💰 \`/price <COIN>\` - Kisi coin ki live price check karein
-❓ \`/help\` - Yeh instructions fir se dekhne ke liye
+💡 *General Commands & Actions:*
+🗣️ \`/speak\` or click *🗣️ Speak Message* - Type anything to convert to voice and stream instantly on your speakers!
+🎙️ Send Voice Note - Kisi bhi voice message/audio record karke send karein, bot download karke direct play/stream kar dega!
+⏰ \`/reminder\` or click *⏰ Set Reminder* - Text reminder schedule karein jo trigger hone par alert voice stream karega.
+🎙️ \`/voicereminder\` or click *🎙️ Voice Reminder* - Apni custom voice record karke reminder lagayein! Trigger hone par direct aapki voice play hogi.
+📋 \`/reminders\` or click *📋 List Reminders* - Apne active reminders manage/edit/delete karein.
+🧹 \`/clearqueue\` / \`/resetqueue\` or click *🧹 Clear Queue* - Saari alerts queue delete karein aur active streaming ko instantly stop karein.
 
-*Conversational Flow:*
-Aap bottom menu buttons ka use karke easily alert create, check, aur manage kar sakte hain!`;
+📈 *Crypto Alerts Commands:*
+➕ \`/add <COIN> <PRICE> [above/below]\` - Target price trigger and voice stream set karein
+   _Example:_ \`/add BTCUSDT 69000 above\`
+📋 \`/list\` or click *📋 List Alerts* - Apne saare active crypto triggers manage karein
+💰 \`/price <COIN>\` or click *💰 Check Price* - Live prices check karein
+⭐️ click *⭐️ Fav Coins* - Apne favorite coins manage karein
+
+*Quick Tips:*
+Aap bottom reply keyboard buttons ka use karke visual wizards block-by-block complete kar sakte hain!`;
 }
 
 // ─── TELEGRAM MESSAGE HANDLERS ────────────────────────────────────────────────
 
-// Handle /start and /help
+// Handle /reminder
+bot.onText(/\/reminder/, async (msg) => {
+  const chatId = msg.chat.id;
+  userStates[chatId] = { action: "add_reminder_note" };
+  return bot.sendMessage(
+    chatId,
+    "⏰ **Set Reminder (Step 1 of 2):**\n\nPlease enter the reminder note/message (e.g., *Meeting with team*, *Buy groceries*):",
+    { parse_mode: "Markdown", reply_markup: mainKeyboard }
+  );
+});
+
+// Handle /voicereminder
+bot.onText(/\/voicereminder/, async (msg) => {
+  const chatId = msg.chat.id;
+  userStates[chatId] = { action: "add_voice_reminder_file" };
+  return bot.sendMessage(
+    chatId,
+    "🎙️ **Set Voice Reminder (Step 1 of 2):**\n\nPlease record and send your voice note/message now:",
+    { parse_mode: "Markdown", reply_markup: mainKeyboard }
+  );
+});
+
+// Handle /reminders
+bot.onText(/\/reminders/, async (msg) => {
+  const chatId = msg.chat.id;
+  userStates[chatId] = null;
+  await sendRemindersList(chatId);
+});// Handle /speak
+bot.onText(/\/speak/, async (msg) => {
+  const chatId = msg.chat.id;
+  userStates[chatId] = { action: "speak_text" };
+  return bot.sendMessage(
+    chatId,
+    "🗣️ **Speak Message:**\n\nPlease type the text message you want me to convert to speech and stream immediately:",
+    { parse_mode: "Markdown", reply_markup: mainKeyboard }
+  );
+});
+
+// Handle /clearqueue and /resetqueue
+bot.onText(/\/(clearqueue|resetqueue)/, async (msg) => {
+  const chatId = msg.chat.id;
+  userStates[chatId] = null;
+  clearAudioQueue();
+  return bot.sendMessage(chatId, "🧹 **Audio Stream Queue has been cleared successfully!**", {
+    parse_mode: "Markdown",
+    reply_markup: mainKeyboard
+  });
+});
+
+
 bot.onText(/\/start|\/help/, async (msg) => {
   const chatId = msg.chat.id;
   userStates[chatId] = null; // Reset state
@@ -410,6 +495,66 @@ async function sendAlertsList(chatId, messageId = null) {
   }
 }
 
+// Helper function to format and send the reminders list
+async function sendRemindersList(chatId, messageId = null) {
+  const reminders = readReminders().filter((r) => r.chatId === chatId);
+
+  if (reminders.length === 0) {
+    const text = "ℹ️ You don't have any active reminders. Use `⏰ Set Reminder` to create one.";
+    const opts = { parse_mode: "Markdown", reply_markup: mainKeyboard };
+    if (messageId) {
+      return bot.editMessageText(text, {
+        chat_id: chatId,
+        message_id: messageId,
+        ...opts,
+      });
+    } else {
+      return bot.sendMessage(chatId, text, opts);
+    }
+  }
+
+  let responseText = "📋 *Your Scheduled Reminders:*\n\n";
+  const keyboard = [];
+
+  reminders.forEach((reminder, idx) => {
+    const timeStr = new Date(reminder.time).toLocaleString("en-GB", { hour12: false });
+    responseText +=
+      `⏰ *${idx + 1}.* Note: *${reminder.note}*\n` +
+      `   ├ Time: \`${timeStr}\`\n` +
+      `   └ ID: \`${reminder.id}\`\n\n`;
+
+    keyboard.push([
+      { text: `✏️ Note #${idx + 1}`, callback_data: `editrem_note_${reminder.id}` },
+      { text: `📅 Time #${idx + 1}`, callback_data: `editrem_time_${reminder.id}` },
+      { text: `❌ Delete #${idx + 1}`, callback_data: `deleterem_${reminder.id}` },
+    ]);
+  });
+
+  const opts = {
+    parse_mode: "Markdown",
+    reply_markup: {
+      inline_keyboard: keyboard,
+    },
+  };
+
+  if (messageId) {
+    try {
+      await bot.editMessageText(responseText, {
+        chat_id: chatId,
+        message_id: messageId,
+        ...opts,
+      });
+    } catch (e) {
+      if (!e.message.includes("message is not modified")) {
+        console.error("Edit message error:", e.message);
+      }
+    }
+  } else {
+    await bot.sendMessage(chatId, responseText, opts);
+  }
+}
+
+
 // Handle /delete <id>
 bot.onText(/\/delete(?:\s+(\S+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -653,6 +798,79 @@ bot.on("callback_query", async (callbackQuery) => {
       );
     } else {
       await bot.sendMessage(chatId, "❌ Alert not found.", {
+        reply_markup: mainKeyboard,
+      });
+    }
+  } else if (data.startsWith("deleterem_")) {
+    const reminderId = data.substring(10);
+    const reminders = readReminders();
+    const index = reminders.findIndex(
+      (r) => r.id === reminderId && r.chatId === chatId,
+    );
+
+    if (index !== -1) {
+      const note = reminders[index].note;
+      reminders.splice(index, 1);
+      writeReminders(reminders);
+
+      await bot.sendMessage(
+        chatId,
+        `🗑️ Reminder *"${note}"* has been deleted successfully!`,
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
+      );
+      // Refresh list
+      await sendRemindersList(chatId, messageId);
+    } else {
+      await bot.sendMessage(chatId, "❌ Reminder not found or already deleted.", {
+        reply_markup: mainKeyboard,
+      });
+    }
+  } else if (data.startsWith("editrem_note_")) {
+    const reminderId = data.substring(13);
+    const reminders = readReminders();
+    const reminder = reminders.find(
+      (r) => r.id === reminderId && r.chatId === chatId,
+    );
+
+    if (reminder) {
+      userStates[chatId] = {
+        action: "edit_reminder_note",
+        reminderId: reminder.id,
+      };
+      await bot.sendMessage(
+        chatId,
+        `✏️ **Editing Note for Reminder**\n` +
+          `Current Note: *${reminder.note}*\n\n` +
+          `Please type the *new note*:`,
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
+      );
+    } else {
+      await bot.sendMessage(chatId, "❌ Reminder not found.", {
+        reply_markup: mainKeyboard,
+      });
+    }
+  } else if (data.startsWith("editrem_time_")) {
+    const reminderId = data.substring(13);
+    const reminders = readReminders();
+    const reminder = reminders.find(
+      (r) => r.id === reminderId && r.chatId === chatId,
+    );
+
+    if (reminder) {
+      userStates[chatId] = {
+        action: "edit_reminder_time",
+        reminderId: reminder.id,
+      };
+      const currentFormatted = new Date(reminder.time).toLocaleString("en-GB", { hour12: false });
+      await bot.sendMessage(
+        chatId,
+        `📅 **Editing Time for Reminder**\n` +
+          `Current Time: \`${currentFormatted}\`\n\n` +
+          `Please type the *new date & time* in format \`DD-MM-YYYY HH:MM\` (e.g. \`14-06-2026 15:30\`):`,
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
+      );
+    } else {
+      await bot.sendMessage(chatId, "❌ Reminder not found.", {
         reply_markup: mainKeyboard,
       });
     }
@@ -912,6 +1130,48 @@ bot.on("message", async (msg) => {
     return sendFavoritesMenu(chatId);
   }
 
+  if (text === "⏰ Set Reminder") {
+    userStates[chatId] = { action: "add_reminder_note" };
+    return bot.sendMessage(
+      chatId,
+      "⏰ **Set Reminder (Step 1 of 2):**\n\nPlease enter the reminder note/message (e.g., *Meeting with team*, *Buy groceries*):",
+      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    );
+  }
+
+  if (text === "🎙️ Voice Reminder") {
+    userStates[chatId] = { action: "add_voice_reminder_file" };
+    return bot.sendMessage(
+      chatId,
+      "🎙️ **Set Voice Reminder (Step 1 of 2):**\n\nPlease record and send your voice note/message now:",
+      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    );
+  }
+
+  if (text === "📋 List Reminders") {
+    userStates[chatId] = null;
+    return sendRemindersList(chatId);
+  }
+
+  if (text === "🗣️ Speak Message") {
+    userStates[chatId] = { action: "speak_text" };
+    return bot.sendMessage(
+      chatId,
+      "🗣️ **Speak Message:**\n\nPlease type the text message you want me to convert to speech and stream immediately:",
+      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    );
+  }
+
+  if (text === "🧹 Clear Queue") {
+    userStates[chatId] = null;
+    clearAudioQueue();
+    return bot.sendMessage(
+      chatId,
+      "🧹 **Audio Stream Queue has been cleared successfully!**",
+      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    );
+  }
+
   if (text === "❓ Help") {
     userStates[chatId] = null;
     const dashboard = await getDefaultMarketDashboard();
@@ -923,6 +1183,252 @@ bot.on("message", async (msg) => {
 
   const state = userStates[chatId];
   if (!state) return;
+
+  if (state.action === "speak_text") {
+    if (!text) {
+      return bot.sendMessage(
+        chatId,
+        "⚠️ Please enter some text for me to speak:",
+        { reply_markup: mainKeyboard }
+      );
+    }
+    userStates[chatId] = null; // Clear state
+    bot.sendMessage(chatId, "🗣️ Generating audio and sending to stream queue...", { reply_markup: mainKeyboard });
+
+    try {
+      await selectAudioForSpeak(text, "hi"); // Use Hindi TTS which handles mixed Hinglish beautifully
+      return bot.sendMessage(chatId, "✅ Sent to stream queue!", { reply_markup: mainKeyboard });
+    } catch (e) {
+      console.error("Error generating speak audio:", e);
+      return bot.sendMessage(chatId, `❌ Failed to generate audio: ${e.message}`, { reply_markup: mainKeyboard });
+    }
+  }
+
+  if (state.action === "add_voice_reminder_file") {
+    const voice = msg.voice || msg.audio;
+    if (!voice) {
+      return bot.sendMessage(
+        chatId,
+        "⚠️ **Please record and send a voice note/message.**\n" +
+          "If you want to cancel, please click any button on the bottom menu.",
+        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      );
+    }
+
+    bot.sendMessage(chatId, "🎙️ Voice note received. Downloading and preparing your reminder...", { reply_markup: mainKeyboard });
+
+    try {
+      const fileId = voice.file_id;
+      const fileLink = await bot.getFileLink(fileId);
+      const savedPath = await saveVoiceMessage(fileLink, "voice_reminder");
+
+      // Advance to step 2 (getting date and time)
+      userStates[chatId] = {
+        action: "add_reminder_time",
+        type: "voice",
+        filePath: savedPath,
+        note: "[Voice Reminder]"
+      };
+
+      return bot.sendMessage(
+        chatId,
+        `🎙️ **Set Voice Reminder (Step 2 of 2):**\n\n` +
+          `✅ Voice message prepared successfully!\n\n` +
+          `Please enter the *date & time* in format \`DD-MM-YYYY HH:MM\` (e.g., \`14-06-2026 15:30\`):`,
+        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      );
+    } catch (err) {
+      console.error("Error setting voice reminder:", err);
+      return bot.sendMessage(
+        chatId,
+        `❌ Failed to process voice note: ${err.message}`,
+        { reply_markup: mainKeyboard }
+      );
+    }
+  }
+
+  if (state.action === "add_reminder_note") {
+    if (!text) {
+      return bot.sendMessage(
+        chatId,
+        "⚠️ Please enter a valid non-empty note/message for the reminder:",
+        { reply_markup: mainKeyboard }
+      );
+    }
+    userStates[chatId] = {
+      action: "add_reminder_time",
+      note: text
+    };
+    return bot.sendMessage(
+      chatId,
+      `⏰ **Set Reminder (Step 2 of 2):**\n\n` +
+        `📌 Note: *${text}*\n\n` +
+        `Please enter the *date & time* in format \`DD-MM-YYYY HH:MM\` (e.g., \`14-06-2026 15:30\`):`,
+      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    );
+  }
+
+  if (state.action === "add_reminder_time") {
+    const { note } = state;
+    const regex = /^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2})$/;
+    const match = text.match(regex);
+    if (!match) {
+      return bot.sendMessage(
+        chatId,
+        "⚠️ **Invalid format!** Please use the format `DD-MM-YYYY HH:MM`.\n" +
+          "Example: `14-06-2026 18:30`",
+        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      );
+    }
+
+    const [_, day, month, year, hour, minute] = match;
+    const reminderDate = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hour),
+      parseInt(minute),
+      0
+    );
+
+    if (isNaN(reminderDate.getTime())) {
+      return bot.sendMessage(
+        chatId,
+        "⚠️ **Invalid Date!** Please check your date and time values.",
+        { reply_markup: mainKeyboard }
+      );
+    }
+
+    const now = new Date();
+    if (reminderDate <= now) {
+      return bot.sendMessage(
+        chatId,
+        `⚠️ **Time must be in the future!**\n` +
+          `Selected time: *${text}*\n` +
+          `Current time: *${now.toLocaleString("en-GB")}*`,
+        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      );
+    }
+
+    // Save reminder
+    const reminders = readReminders();
+    const newReminder = {
+      id: Date.now().toString() + "_" + Math.random().toString(36).substr(2, 5),
+      chatId,
+      type: state.type || "text",
+      filePath: state.filePath || null,
+      note,
+      time: reminderDate.toISOString(),
+      createdAt: new Date().toISOString()
+    };
+    reminders.push(newReminder);
+    writeReminders(reminders);
+
+    userStates[chatId] = null; // Clear state
+
+    const displayNote = state.type === "voice" ? "🎙️ [Voice Reminder]" : note;
+
+    return bot.sendMessage(
+      chatId,
+      `✅ **Reminder set successfully!**\n\n` +
+        `📌 **Note:** *${displayNote}*\n` +
+        `📅 **Time:** *${text}*`,
+      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    );
+  }
+
+  if (state.action === "edit_reminder_note") {
+    const { reminderId } = state;
+    const reminders = readReminders();
+    const reminder = reminders.find((r) => r.id === reminderId);
+
+    if (reminder) {
+      const oldNote = reminder.note;
+      reminder.note = text;
+      writeReminders(reminders);
+      userStates[chatId] = null;
+
+      return bot.sendMessage(
+        chatId,
+        `✅ **Reminder note updated successfully!**\n\n` +
+          `Old Note: *${oldNote}*\n` +
+          `New Note: *${text}*`,
+        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      );
+    } else {
+      userStates[chatId] = null;
+      return bot.sendMessage(chatId, "❌ Reminder not found.", {
+        reply_markup: mainKeyboard,
+      });
+    }
+  }
+
+  if (state.action === "edit_reminder_time") {
+    const { reminderId } = state;
+    const reminders = readReminders();
+    const reminder = reminders.find((r) => r.id === reminderId);
+
+    if (reminder) {
+      const regex = /^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2})$/;
+      const match = text.match(regex);
+      if (!match) {
+        return bot.sendMessage(
+          chatId,
+          "⚠️ **Invalid format!** Please enter date & time in `DD-MM-YYYY HH:MM`.\n" +
+            "Example: `14-06-2026 18:30`",
+          { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        );
+      }
+
+      const [_, day, month, year, hour, minute] = match;
+      const reminderDate = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute),
+        0
+      );
+
+      if (isNaN(reminderDate.getTime())) {
+        return bot.sendMessage(
+          chatId,
+          "⚠️ **Invalid Date!** Please check the values.",
+          { reply_markup: mainKeyboard }
+        );
+      }
+
+      const now = new Date();
+      if (reminderDate <= now) {
+        return bot.sendMessage(
+          chatId,
+          `⚠️ **Time must be in the future!**\n` +
+            `Selected time: *${text}*\n` +
+            `Current time: *${now.toLocaleString("en-GB")}*`,
+          { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        );
+      }
+
+      const oldTimeStr = new Date(reminder.time).toLocaleString("en-GB", { hour12: false });
+      reminder.time = reminderDate.toISOString();
+      writeReminders(reminders);
+      userStates[chatId] = null;
+
+      return bot.sendMessage(
+        chatId,
+        `✅ **Reminder time updated successfully!**\n\n` +
+          `📌 Note: *${reminder.note}*\n` +
+          `Old Time: *${oldTimeStr}*\n` +
+          `New Time: *${text}*`,
+        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      );
+    } else {
+      userStates[chatId] = null;
+      return bot.sendMessage(chatId, "❌ Reminder not found.", {
+        reply_markup: mainKeyboard,
+      });
+    }
+  }
 
   if (state.action === "check_price_symbol") {
     userStates[chatId] = null; // Reset state
@@ -1247,8 +1753,93 @@ async function monitorMarket() {
   }
 }
 
-// Start the monitoring engine
+async function monitorReminders() {
+  try {
+    const reminders = readReminders();
+    if (reminders.length > 0) {
+      const now = new Date();
+      let remindersChanged = false;
+      const remainingReminders = [];
+
+      for (const reminder of reminders) {
+        const reminderTime = new Date(reminder.time);
+        if (reminderTime <= now) {
+          remindersChanged = true;
+          const message = `🔔 **REMINDER ALERT!** 🔔\n\n📌 *${reminder.note}*`;
+
+          try {
+            await bot.sendMessage(reminder.chatId, message, {
+              parse_mode: "Markdown",
+              reply_markup: mainKeyboard,
+            });
+            console.log(`Reminder sent for note "${reminder.note}" to chatId ${reminder.chatId}`);
+          } catch (error) {
+            console.error(`Error sending telegram reminder to ${reminder.chatId}:`, error.message);
+          }
+
+          // Generate audio for reminder
+          try {
+            if (reminder.type === "voice" && reminder.filePath) {
+              queueAudio("reminder", reminder.filePath);
+            } else {
+              await selectAudioForReminder(`सर, यह आपका रिमांडर है: ${reminder.note}`, "hi");
+            }
+          } catch (audioError) {
+            console.error("Error generating reminder audio alert:", audioError.message);
+          }
+        } else {
+          remainingReminders.push(reminder);
+        }
+      }
+
+      if (remindersChanged) {
+        writeReminders(remainingReminders);
+      }
+    }
+  } catch (err) {
+    console.error("Error in monitorReminders loop:", err.message);
+  } finally {
+    // Check again every 5 seconds
+    setTimeout(monitorReminders, 5000);
+  }
+}
+
+// Start the monitoring engines
 console.log(
-  "Price monitoring engine started. Checking prices every 10 seconds...",
+  "Price monitoring and reminders engines started.",
 );
 monitorMarket();
+monitorReminders();
+
+// Listen for voice messages
+bot.on("voice", async (msg) => {
+  const chatId = msg.chat.id;
+  if (userStates[chatId] && userStates[chatId].action === "add_voice_reminder_file") {
+    return; // Ignored globally so conversational wizard handles it
+  }
+  const fileId = msg.voice.file_id;
+  await handleIncomingAudioFile(chatId, fileId);
+});
+
+// Listen for audio messages
+bot.on("audio", async (msg) => {
+  const chatId = msg.chat.id;
+  if (userStates[chatId] && userStates[chatId].action === "add_voice_reminder_file") {
+    return; // Ignored globally so conversational wizard handles it
+  }
+  const fileId = msg.audio.file_id;
+  await handleIncomingAudioFile(chatId, fileId);
+});
+
+async function handleIncomingAudioFile(chatId, fileId) {
+  bot.sendMessage(chatId, "🎙️ Voice note received. Downloading and preparing stream...", { reply_markup: mainKeyboard });
+  try {
+    const fileLink = await bot.getFileLink(fileId);
+    console.log(`[Bot] Download link for voice message: ${fileLink}`);
+    await queueVoiceAudio(fileLink);
+    await bot.sendMessage(chatId, "✅ Voice note successfully prepared and added to stream queue!", { reply_markup: mainKeyboard });
+  } catch (e) {
+    console.error("Error processing voice message:", e);
+    await bot.sendMessage(chatId, `❌ Failed to process voice note: ${e.message}`, { reply_markup: mainKeyboard });
+  }
+}
