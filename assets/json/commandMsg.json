@@ -14,12 +14,12 @@
   "crypto": {
     "hi": [
       {
-        "msg": "हेल्लो सर, अभी अभी एक नया बिटकॉइन transaction आया है। Transaction का समय है {$time}"
+        "msg": "यही मैसेज क्रिप्टो के बारे मई है, {$coin} की कीमत {$price} हो चुकी है!"
       }
     ],
     "en": [
       {
-        "msg": "Hello Sir, a new Bitcoin transaction has arrived. The transaction time is {$time}."
+        "msg": "This message is about crypto, the price of {$coin} has become {$price}!"
       }
     ]
   }

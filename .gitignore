@@ -10,10 +10,12 @@ tts/models/
 # Local Credentials & Sensitive tokens
 assets/json/token.json
 assets/json/credentials.json
+assets/json/triggers.json
 
 # Audio Outputs
 *.wav
 assets/audio/*.wav
+.env
 
 # OS files
 .DS_Store
