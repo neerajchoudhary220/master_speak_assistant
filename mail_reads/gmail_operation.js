@@ -70,7 +70,7 @@ async function getLatestUnreadMail(auth) {
   const res = await gmail.users.messages.list({
     userId: "me",
     maxResults: 1,
-    q: "is:unread",
+    q: "is:unread newer_than:1d",
   });
 
   if (!res.data.messages || res.data.messages.length === 0) {
