@@ -17,6 +17,9 @@ const char* password = "YOUR_WIFI_PASSWORD";
 const char* server_host = "YOUR_SERVER_IP"; // Jaise: "192.168.1.15"
 const int server_port   = 3000;
 
+// Audio volume gain setting (0.0 to 4.0, where 1.0 is default, and 4.0 is maximum volume)
+const float audio_gain   = 4.0;
+
 // ─── INSTANCES ───────────────────────────────────────────────────────────────
 WebSocketsClient webSocket;
 
@@ -80,6 +83,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                     // Naya stream setup karo
                     file = new AudioFileSourceHTTPStream(audio_url);
                     out = new AudioOutputI2SNoDAC();
+                    out->SetGain(audio_gain);        // Set audio volume to full (gain of 4.0)
                     wav = new AudioGeneratorWAV();   // CHANGED: Instantiating AudioGeneratorWAV
                     
                     wav->begin(file, out);
@@ -119,6 +123,7 @@ void setup() {
     Serial.printf("[Audio] Playing connection sound: %s\n", connect_url);
     file = new AudioFileSourceHTTPStream(connect_url);
     out = new AudioOutputI2SNoDAC();
+    out->SetGain(audio_gain);        // Set audio volume to full (gain of 4.0)
     wav = new AudioGeneratorWAV();
     wav->begin(file, out);
 
