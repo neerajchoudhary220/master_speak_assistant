@@ -18,11 +18,11 @@ function generateHiAudio(text, fileName) {
     processs.on("close", (code) => {
       console.log(`child process exited with code ${code}`);
       if (code === 0) {
-        // Boost volume to maximum (3x gain) and strip all metadata/encoder tags
+        // Boost volume (3x), strip metadata, and force 16000Hz mono WAV for ESP8266 compatibility
         const tempPath = outputFilePath + ".tmp.wav";
         fs.rename(outputFilePath, tempPath, (renameErr) => {
           if (renameErr) return reject(renameErr);
-          exec(`ffmpeg -y -i "${tempPath}" -fflags +bitexact -flags:a +bitexact -map_metadata -1 -filter:a "volume=3.0" -acodec pcm_s16le "${outputFilePath}"`, (ffmpegErr) => {
+          exec(`ffmpeg -y -i "${tempPath}" -fflags +bitexact -flags:a +bitexact -map_metadata -1 -filter:a "volume=3.0" -acodec pcm_s16le -ar 16000 -ac 1 "${outputFilePath}"`, (ffmpegErr) => {
             try { fs.unlinkSync(tempPath); } catch (e) {}
             if (ffmpegErr) {
               reject(ffmpegErr);
@@ -51,11 +51,11 @@ function generateEnAudio(text, fileName) {
     processs.on("close", (code) => {
       console.log(`child process exited with code ${code}`);
       if (code === 0) {
-        // Boost volume to maximum (3x gain) and strip all metadata/encoder tags
+        // Boost volume (3x), strip metadata, and force 16000Hz mono WAV for ESP8266 compatibility
         const tempPath = outputFilePath + ".tmp.wav";
         fs.rename(outputFilePath, tempPath, (renameErr) => {
           if (renameErr) return reject(renameErr);
-          exec(`ffmpeg -y -i "${tempPath}" -fflags +bitexact -flags:a +bitexact -map_metadata -1 -filter:a "volume=3.0" -acodec pcm_s16le "${outputFilePath}"`, (ffmpegErr) => {
+          exec(`ffmpeg -y -i "${tempPath}" -fflags +bitexact -flags:a +bitexact -map_metadata -1 -filter:a "volume=3.0" -acodec pcm_s16le -ar 16000 -ac 1 "${outputFilePath}"`, (ffmpegErr) => {
             try { fs.unlinkSync(tempPath); } catch (e) {}
             if (ffmpegErr) {
               reject(ffmpegErr);
