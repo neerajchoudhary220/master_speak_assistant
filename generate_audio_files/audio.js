@@ -168,9 +168,9 @@ const saveVoiceMessage = async (fileUrl, prefix = "voice") => {
     writer.on("error", reject);
   });
 
-  // Convert to wav using ffmpeg
+  // Convert to wav using ffmpeg with 3x volume boost
   await new Promise((resolve, reject) => {
-    exec(`ffmpeg -y -i "${oggPath}" -acodec pcm_s16le -ar 16000 -ac 1 "${wavPath}"`, (err, stdout, stderr) => {
+    exec(`ffmpeg -y -i "${oggPath}" -filter:a "volume=3.0" -acodec pcm_s16le -ar 16000 -ac 1 "${wavPath}"`, (err, stdout, stderr) => {
       // Clean up the ogg file
       try {
         fs.unlinkSync(oggPath);

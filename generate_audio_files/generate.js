@@ -1,4 +1,4 @@
-const { spawn } = require("child_process");
+const { spawn, exec } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const venvPython = path.join(__dirname, "..", "tts", ".venv", "bin", "python");
@@ -7,6 +7,7 @@ const Audio_OUT_PUT = path.join(__dirname, "..", "assets", "audio");
 if (!fs.existsSync(Audio_OUT_PUT)) {
   fs.mkdirSync(Audio_OUT_PUT, { recursive: true });
 }
+
 function generateHiAudio(text, fileName) {
   return new Promise((resolve, reject) => {
     const outputFilePath = path.join(Audio_OUT_PUT, `${fileName}.wav`);
@@ -17,7 +18,19 @@ function generateHiAudio(text, fileName) {
     processs.on("close", (code) => {
       console.log(`child process exited with code ${code}`);
       if (code === 0) {
-        resolve(outputFilePath);
+        // Boost volume to maximum (3x gain)
+        const tempPath = outputFilePath + ".tmp.wav";
+        fs.rename(outputFilePath, tempPath, (renameErr) => {
+          if (renameErr) return reject(renameErr);
+          exec(`ffmpeg -y -i "${tempPath}" -filter:a "volume=3.0" -acodec pcm_s16le "${outputFilePath}"`, (ffmpegErr) => {
+            try { fs.unlinkSync(tempPath); } catch (e) {}
+            if (ffmpegErr) {
+              reject(ffmpegErr);
+            } else {
+              resolve(outputFilePath);
+            }
+          });
+        });
       } else {
         reject(new Error(`Hi-TTS script exited with code ${code}`));
       }
@@ -38,7 +51,19 @@ function generateEnAudio(text, fileName) {
     processs.on("close", (code) => {
       console.log(`child process exited with code ${code}`);
       if (code === 0) {
-        resolve(outputFilePath);
+        // Boost volume to maximum (3x gain)
+        const tempPath = outputFilePath + ".tmp.wav";
+        fs.rename(outputFilePath, tempPath, (renameErr) => {
+          if (renameErr) return reject(renameErr);
+          exec(`ffmpeg -y -i "${tempPath}" -filter:a "volume=3.0" -acodec pcm_s16le "${outputFilePath}"`, (ffmpegErr) => {
+            try { fs.unlinkSync(tempPath); } catch (e) {}
+            if (ffmpegErr) {
+              reject(ffmpegErr);
+            } else {
+              resolve(outputFilePath);
+            }
+          });
+        });
       } else {
         reject(new Error(`En-TTS script exited with code ${code}`));
       }
