@@ -6,25 +6,30 @@
 
 // ESP8266Audio libraries
 #include "AudioFileSourceHTTPStream.h"
-#include "AudioGeneratorWAV.h"      // CHANGED: Using WAV instead of MP3 since server outputs .wav
+#include "AudioFileSourceBuffer.h"  // ADDED: For smoothing out network stream jitter
+#include "AudioGeneratorWAV.h"      
 #include "AudioOutputI2SNoDAC.h"
 
 // ─── CONFIGURATION ───────────────────────────────────────────────────────────
-const char* ssid     = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid     = "Home-wifi";
+const char* password = "GoodBye@123";
 
 // Node.js server configurations
-const char* server_host = "YOUR_SERVER_IP"; // Jaise: "192.168.1.15"
+const char* server_host = "160.250.204.157"; 
 const int server_port   = 3000;
 
 // Audio volume gain setting (0.0 to 4.0, where 1.0 is default, and 4.0 is maximum volume)
 const float audio_gain   = 4.0;
 
+// Buzzer Pin Define kiya hai (NodeMCU ka D1 pin yani GPIO 5)
+#define BUZZER_PIN D1 
+
 // ─── INSTANCES ───────────────────────────────────────────────────────────────
 WebSocketsClient webSocket;
 
-AudioGeneratorWAV *wav = NULL;      // CHANGED: AudioGeneratorWAV
+AudioGeneratorWAV *wav = NULL;      
 AudioFileSourceHTTPStream *file = NULL;
+AudioFileSourceBuffer *buff = NULL; // ADDED: Buffer instance
 AudioOutputI2SNoDAC *out = NULL;
 
 // ─── HELPER FUNCTION TO STOP AUDIO ───────────────────────────────────────────
@@ -35,6 +40,10 @@ void stopAudio() {
         }
         delete wav; 
         wav = NULL;
+    }
+    if (buff) { 
+        delete buff; 
+        buff = NULL; 
     }
     if (file) { 
         delete file; 
@@ -82,11 +91,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
                     // Naya stream setup karo
                     file = new AudioFileSourceHTTPStream(audio_url);
+                    buff = new AudioFileSourceBuffer(file, 2048); // ADDED: Buffer initialization
                     out = new AudioOutputI2SNoDAC();
                     out->SetGain(audio_gain);        // Set audio volume to full (gain of 4.0)
-                    wav = new AudioGeneratorWAV();   // CHANGED: Instantiating AudioGeneratorWAV
+                    wav = new AudioGeneratorWAV();   
                     
-                    wav->begin(file, out);
+                    wav->begin(buff, out); // CHANGED: pass buff instead of file
                 }
             }
             // 2. Handle Queue Reset Event
@@ -106,26 +116,50 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
+    // Buzzer pin ko output set kiya
+    pinMode(BUZZER_PIN, OUTPUT);
+    digitalWrite(BUZZER_PIN, LOW); // Shuru me buzzer OFF rahega
+
+    // --- FIX: Clear old WiFi cache and force Station mode ---
+    WiFi.mode(WIFI_STA); 
+    WiFi.disconnect();   
+    delay(100);          
+    // --------------------------------------------------------
+
     // Connect to WiFi
     WiFi.begin(ssid, password);
     Serial.print("\nConnecting to WiFi");
+    
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
+        yield(); // --- FIX: Background processes ko run karne dega taaki WDT reset na ho ---
     }
+    
     Serial.println("\nWiFi Connected!");
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
 
-    // Play startup/connection sound
+    // --- BUZZER BEEP LOGIC (3 BAAR) ---
+    Serial.println("Playing 3 Beeps...");
+    for(int i = 0; i < 3; i++) {
+        digitalWrite(BUZZER_PIN, HIGH); // Buzzer ON
+        delay(150);                     // 150 milliseconds tak awaz karega
+        digitalWrite(BUZZER_PIN, LOW);  // Buzzer OFF
+        delay(150);                     // 150 milliseconds ka gap
+    }
+    // ----------------------------------
+
+    // Play startup/connection sound (Server se wav file play hogi)
     char connect_url[128];
     sprintf(connect_url, "http://%s:%d/api/connect-audio", server_host, server_port);
     Serial.printf("[Audio] Playing connection sound: %s\n", connect_url);
     file = new AudioFileSourceHTTPStream(connect_url);
+    buff = new AudioFileSourceBuffer(file, 2048); // ADDED: Buffer initialization
     out = new AudioOutputI2SNoDAC();
     out->SetGain(audio_gain);        // Set audio volume to full (gain of 4.0)
     wav = new AudioGeneratorWAV();
-    wav->begin(file, out);
+    wav->begin(buff, out); // CHANGED: pass buff instead of file
 
     // Initialize WebSockets Client
     webSocket.begin(server_host, server_port, "/");
@@ -138,7 +172,7 @@ void loop() {
     webSocket.loop();
     
     // Audio background processing
-    if (wav && wav->isRunning()) {    // CHANGED: Processing AudioGeneratorWAV
+    if (wav && wav->isRunning()) {    
         if (!wav->loop()) {
             wav->stop();
             Serial.println("[Audio] Finished playing stream.");
