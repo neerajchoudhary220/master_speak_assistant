@@ -9,8 +9,8 @@ async function readUnreadMail() {
   if (!unreadMail) {
     return;
   }
-  const { sender, date } = unreadMail;
-  selectAudio("mail", { sender, date }, "hi");
+  const { sender, subject, date, category } = unreadMail;
+  selectAudio("mail", { sender, subject, date, category }, "en");
 }
 
 async function startEmailWatcher() {
@@ -64,7 +64,9 @@ async function startEmailWatcher() {
   try {
     await client.connect();
     const lock = await client.getMailboxLock("INBOX");
-    console.log("IMAP connection established. Listening for new emails in real-time...");
+    console.log(
+      "IMAP connection established. Listening for new emails in real-time...",
+    );
 
     process.on("SIGINT", async () => {
       console.log("Disconnecting watcher...");
@@ -73,7 +75,10 @@ async function startEmailWatcher() {
       process.exit(0);
     });
   } catch (err) {
-    console.error("Failed to establish IMAP connection. Retrying in 5 seconds...", err);
+    console.error(
+      "Failed to establish IMAP connection. Retrying in 5 seconds...",
+      err,
+    );
     setTimeout(() => {
       startEmailWatcher().catch(console.error);
     }, 5000);

@@ -20,3 +20,6 @@ assets/audio/*.wav
 # OS files
 .DS_Store
 Thumbs.db
+
+# Large tar archive files
+*.tar

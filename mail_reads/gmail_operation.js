@@ -29,7 +29,18 @@ function getExtractedData(msgData) {
 
   const subject = headers.find((h) => h.name === "Subject")?.value || "";
 
-  const date = headers.find((h) => h.name === "Date")?.value || "";
+  const dateRaw = headers.find((h) => h.name === "Date")?.value || "";
+  let date = dateRaw;
+  if (dateRaw) {
+    const parsed = new Date(dateRaw);
+    if (!isNaN(parsed.getTime())) {
+      const day = parsed.getDate();
+      const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const month = months[parsed.getMonth()];
+      const year = parsed.getFullYear();
+      date = `${day} ${month} ${year}`;
+    }
+  }
 
   const sender = from.match(/^(.*?)\s*</)?.[1] || from;
 

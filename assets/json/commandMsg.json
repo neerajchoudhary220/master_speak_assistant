@@ -7,7 +7,7 @@
     ],
     "en": [
       {
-        "msg": "Hello Sir, a new email has arrived from {$sender}. The email date is {$date}. Thanks, Have a great day"
+        "msg": "Hello Sir, a new email has arrived from {$sender}. Subject:{$subject}, The email date is {$date}. Thanks, Have a great day"
       }
     ]
   },

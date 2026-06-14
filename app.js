@@ -1,3 +1,7 @@
+// Silence all console logs and errors to prevent PM2 log bloating
+console.log = () => {};
+console.error = () => {};
+
 const express = require("express");
 const app = express();
 const streamRouter = require("./routes/streamRoute");
