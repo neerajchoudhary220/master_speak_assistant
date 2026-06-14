@@ -7,7 +7,7 @@
 // ESP8266Audio libraries
 #include "AudioFileSourceHTTPStream.h"
 #include "AudioFileSourceBuffer.h"  // ADDED: For smoothing out network stream jitter
-#include "AudioGeneratorWAV.h"      
+#include "AudioGeneratorMP3.h"      // CHANGED: Using MP3 generator
 #include "AudioOutputI2SNoDAC.h"
 
 // ─── CONFIGURATION ───────────────────────────────────────────────────────────
@@ -27,19 +27,19 @@ const float audio_gain   = 4.0;
 // ─── INSTANCES ───────────────────────────────────────────────────────────────
 WebSocketsClient webSocket;
 
-AudioGeneratorWAV *wav = NULL;      
+AudioGeneratorMP3 *mp3 = NULL;      // CHANGED: AudioGeneratorMP3
 AudioFileSourceHTTPStream *file = NULL;
 AudioFileSourceBuffer *buff = NULL; // ADDED: Buffer instance
 AudioOutputI2SNoDAC *out = NULL;
 
 // ─── HELPER FUNCTION TO STOP AUDIO ───────────────────────────────────────────
 void stopAudio() {
-    if (wav) {
-        if (wav->isRunning()) {
-            wav->stop();
+    if (mp3) {
+        if (mp3->isRunning()) {
+            mp3->stop();
         }
-        delete wav; 
-        wav = NULL;
+        delete mp3; 
+        mp3 = NULL;
     }
     if (buff) { 
         delete buff; 
@@ -94,9 +94,9 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                     buff = new AudioFileSourceBuffer(file, 2048); // ADDED: Buffer initialization
                     out = new AudioOutputI2SNoDAC();
                     out->SetGain(audio_gain);        // Set audio volume to full (gain of 4.0)
-                    wav = new AudioGeneratorWAV();   
+                    mp3 = new AudioGeneratorMP3();   // CHANGED: Instantiating AudioGeneratorMP3
                     
-                    wav->begin(buff, out); // CHANGED: pass buff instead of file
+                    mp3->begin(buff, out); // CHANGED: pass buff instead of file
                 }
             }
             // 2. Handle Queue Reset Event
@@ -150,7 +150,7 @@ void setup() {
     }
     // ----------------------------------
 
-    // Play startup/connection sound (Server se wav file play hogi)
+    // Play startup/connection sound (Server se mp3 file play hogi)
     char connect_url[128];
     sprintf(connect_url, "http://%s:%d/api/connect-audio", server_host, server_port);
     Serial.printf("[Audio] Playing connection sound: %s\n", connect_url);
@@ -158,8 +158,8 @@ void setup() {
     buff = new AudioFileSourceBuffer(file, 2048); // ADDED: Buffer initialization
     out = new AudioOutputI2SNoDAC();
     out->SetGain(audio_gain);        // Set audio volume to full (gain of 4.0)
-    wav = new AudioGeneratorWAV();
-    wav->begin(buff, out); // CHANGED: pass buff instead of file
+    mp3 = new AudioGeneratorMP3();   // CHANGED: Instantiating AudioGeneratorMP3
+    mp3->begin(buff, out); // CHANGED: pass buff instead of file
 
     // Initialize WebSockets Client
     webSocket.begin(server_host, server_port, "/");
@@ -172,9 +172,9 @@ void loop() {
     webSocket.loop();
     
     // Audio background processing
-    if (wav && wav->isRunning()) {    
-        if (!wav->loop()) {
-            wav->stop();
+    if (mp3 && mp3->isRunning()) {    
+        if (!mp3->loop()) {
+            mp3->stop();
             Serial.println("[Audio] Finished playing stream.");
         }
     }

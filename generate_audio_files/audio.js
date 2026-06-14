@@ -147,7 +147,7 @@ const saveVoiceMessage = async (fileUrl, prefix = "voice") => {
   const uniqueName = `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
   const audioDir = path.join(__dirname, "..", "assets", "audio");
   const oggPath = path.join(audioDir, `${uniqueName}.ogg`);
-  const wavPath = path.join(audioDir, `${uniqueName}.wav`);
+  const mp3Path = path.join(audioDir, `${uniqueName}.mp3`);
 
   if (!fs.existsSync(audioDir)) {
     fs.mkdirSync(audioDir, { recursive: true });
@@ -168,16 +168,16 @@ const saveVoiceMessage = async (fileUrl, prefix = "voice") => {
     writer.on("error", reject);
   });
 
-  // Convert to wav using ffmpeg with 3x volume boost and strip all metadata
+  // Convert to mp3 using ffmpeg with 3x volume boost and strip all metadata
   await new Promise((resolve, reject) => {
-    exec(`ffmpeg -y -i "${oggPath}" -fflags +bitexact -flags:a +bitexact -map_metadata -1 -filter:a "volume=3.0" -acodec pcm_s16le -ar 16000 -ac 1 "${wavPath}"`, (err, stdout, stderr) => {
+    exec(`ffmpeg -y -i "${oggPath}" -fflags +bitexact -flags:a +bitexact -map_metadata -1 -filter:a "volume=3.0" -codec:a libmp3lame -b:a 64k -ar 16000 -ac 1 "${mp3Path}"`, (err, stdout, stderr) => {
       // Clean up the ogg file
       try {
         fs.unlinkSync(oggPath);
       } catch (e) {}
 
       if (err) {
-        console.error("FFmpeg error converting ogg to wav:", err);
+        console.error("FFmpeg error converting ogg to mp3:", err);
         reject(err);
       } else {
         resolve();
@@ -185,13 +185,13 @@ const saveVoiceMessage = async (fileUrl, prefix = "voice") => {
     });
   });
 
-  return wavPath;
+  return mp3Path;
 };
 
 const queueVoiceAudio = async (fileUrl) => {
   try {
-    const wavPath = await saveVoiceMessage(fileUrl, "voice");
-    queueAudio("voice", wavPath);
+    const mp3Path = await saveVoiceMessage(fileUrl, "voice");
+    queueAudio("voice", mp3Path);
   } catch (err) {
     console.error("Error queueing voice audio:", err);
     throw err;

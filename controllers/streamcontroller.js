@@ -230,16 +230,16 @@ const clearQueueAndStop = () => {
 exports.clearQueueAndStop = clearQueueAndStop;
 
 exports.getConnectAudio = (req, res) => {
-  const filePath = path.join(__dirname, "..", "assets", "audio", "connect.wav");
+  const filePath = path.join(__dirname, "..", "assets", "audio", "connect.mp3");
   if (fs.existsSync(filePath)) {
-    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("Content-Type", "audio/mpeg");
     res.sendFile(filePath, (err) => {
       if (err && !res.headersSent) {
-        console.error("Error sending connect.wav:", err);
+        console.error("Error sending connect.mp3:", err);
       }
     });
   } else {
-    res.status(404).json({ message: "connect.wav not found" });
+    res.status(404).json({ message: "connect.mp3 not found" });
   }
 };
 
