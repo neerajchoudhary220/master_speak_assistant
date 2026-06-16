@@ -7,58 +7,38 @@ let activeResponse = null;
 const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = null) => {
   try {
     const stat = fs.statSync(filePath);
+    const fileBuffer = fs.readFileSync(filePath);
+    
+    // Set Content-Length and other headers
     const headers = {
       "Content-Type": "audio/mpeg",
+      "Content-Length": fileBuffer.length,
       "Accept-Ranges": "bytes",
       "Cache-Control": "no-cache",
       ...extraHeaders
     };
     res.writeHead(200, headers);
 
-    const fileBuffer = fs.readFileSync(filePath);
-    const totalLength = fileBuffer.length;
+    // Send the entire buffer at once
+    res.write(fileBuffer);
 
-    // Send the first 12KB (or the entire file if smaller) immediately
-    const initialBurstSize = Math.min(12288, totalLength);
-    res.write(fileBuffer.slice(0, initialBurstSize));
+    // Calculate a safe hold-open duration: at least 6 seconds, or longer for larger files
+    // Assuming a minimum bitrate of 32 kbps (4 KB/s), duration is size / 4000
+    const estimatedDurationMs = Math.max(6000, Math.ceil((fileBuffer.length / 4000) * 1000) + 2000);
 
-    if (initialBurstSize >= totalLength) {
-      // Keep connection open for 4 seconds after sending all data
-      const timeoutId = setTimeout(() => {
+    // Keep connection open to let the ESP32 play the buffer fully before closing
+    const timeoutId = setTimeout(() => {
+      try {
         res.end();
-        if (onComplete) onComplete();
-      }, 4000);
-      req.on("close", () => {
-        clearTimeout(timeoutId);
-      });
-      return;
-    }
-
-    let offset = initialBurstSize;
-    const chunkSize = 4096;
-    const intervalId = setInterval(() => {
-      if (offset < totalLength) {
-        const nextChunkSize = Math.min(chunkSize, totalLength - offset);
-        res.write(fileBuffer.slice(offset, offset + nextChunkSize));
-        offset += nextChunkSize;
-      } else {
-        clearInterval(intervalId);
-        // Keep connection open for 4 seconds after sending all data
-        const timeoutId = setTimeout(() => {
-          res.end();
-          if (onComplete) onComplete();
-        }, 4000);
-        req.on("close", () => {
-          clearTimeout(timeoutId);
-        });
-      }
-    }, 400);
+      } catch (e) {}
+      if (onComplete) onComplete();
+    }, estimatedDurationMs);
 
     req.on("close", () => {
-      clearInterval(intervalId);
+      clearTimeout(timeoutId);
     });
   } catch (err) {
-    console.error("Throttled file streaming error:", err);
+    console.error("File streaming error:", err);
     if (!res.headersSent) {
       res.status(500).json({ message: "error streaming audio file" });
     }
