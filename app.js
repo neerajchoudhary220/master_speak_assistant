@@ -1,6 +1,6 @@
 // Silence all console logs and errors to prevent PM2 log bloating
-console.log = () => {};
-console.error = () => {};
+// console.log = () => {};
+// console.error = () => {};
 
 const express = require("express");
 const app = express();
@@ -35,7 +35,11 @@ function getLocalIP() {
     const iface = interfaces[devName];
     for (let i = 0; i < iface.length; i++) {
       const alias = iface[i];
-      if (alias.family === "IPv4" && alias.address !== "127.0.0.1" && !alias.internal) {
+      if (
+        alias.family === "IPv4" &&
+        alias.address !== "127.0.0.1" &&
+        !alias.internal
+      ) {
         return alias.address;
       }
     }
@@ -51,9 +55,11 @@ function broadcastAudioAvailable(details) {
     url: `http://${getLocalIP()}:3000/api/audio-stream?id=${details.id}`,
     category: details.category,
     priority: details.priority,
-    id: details.id
+    id: details.id,
   });
-  console.log(`[WS] Broadcasting audio_available to ${global.wsClients.size} clients: ${details.category}`);
+  console.log(
+    `[WS] Broadcasting audio_available to ${global.wsClients.size} clients: ${details.category}`,
+  );
   for (const client of global.wsClients) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(msg);
@@ -78,9 +84,11 @@ function checkAndNotifyPendingAudio(ws) {
         url: `http://${getLocalIP()}:3000/api/audio-stream?id=${audioItem.id}`,
         category: audioItem.category,
         priority: audioItem.priority,
-        id: audioItem.id
+        id: audioItem.id,
       });
-      console.log(`[WS] Notifying newly connected client of pending audio: ${audioItem.category}`);
+      console.log(
+        `[WS] Notifying newly connected client of pending audio: ${audioItem.category}`,
+      );
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(msg);
       }
@@ -118,7 +126,12 @@ function cleanupOrphanedAudioFiles() {
   console.log("[Cleanup] Starting orphaned audio files cleanup...");
   const audioDir = path.join(__dirname, "assets", "audio");
   const queuePath = path.join(__dirname, "assets", "json", "audioQueue.json");
-  const remindersPath = path.join(__dirname, "assets", "json", "reminders.json");
+  const remindersPath = path.join(
+    __dirname,
+    "assets",
+    "json",
+    "reminders.json",
+  );
 
   if (!fs.existsSync(audioDir)) return;
 
@@ -128,7 +141,7 @@ function cleanupOrphanedAudioFiles() {
     try {
       const data = JSON.parse(fs.readFileSync(queuePath, "utf8"));
       if (data.queue) {
-        data.queue.forEach(item => {
+        data.queue.forEach((item) => {
           if (item.filePath) activeFiles.add(path.resolve(item.filePath));
         });
       }
@@ -141,7 +154,7 @@ function cleanupOrphanedAudioFiles() {
   if (fs.existsSync(remindersPath)) {
     try {
       const reminders = JSON.parse(fs.readFileSync(remindersPath, "utf8"));
-      reminders.forEach(item => {
+      reminders.forEach((item) => {
         if (item.filePath) activeFiles.add(path.resolve(item.filePath));
       });
     } catch (e) {
@@ -152,13 +165,14 @@ function cleanupOrphanedAudioFiles() {
   // 3. Scan directory and delete orphaned generated files
   try {
     const files = fs.readdirSync(audioDir);
-    files.forEach(file => {
-      const isGenerated = file.startsWith("mail_") || 
-                          file.startsWith("reminder_") || 
-                          file.startsWith("speak_") || 
-                          file.startsWith("voice_") || 
-                          file.startsWith("crypto_");
-                          
+    files.forEach((file) => {
+      const isGenerated =
+        file.startsWith("mail_") ||
+        file.startsWith("reminder_") ||
+        file.startsWith("speak_") ||
+        file.startsWith("voice_") ||
+        file.startsWith("crypto_");
+
       if (isGenerated) {
         const fullPath = path.resolve(path.join(audioDir, file));
         if (!activeFiles.has(fullPath)) {
@@ -178,7 +192,7 @@ function cleanupOrphanedAudioFiles() {
 
 async function main() {
   cleanupOrphanedAudioFiles();
-  await startEmailWatcher();
+  // await startEmailWatcher();
   // Start the Telegram bot and crypto price monitoring engine
   require("./bots/bot");
 }

@@ -2,7 +2,14 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
-const { selectAudio, selectAudioForReminder, selectAudioForSpeak, queueVoiceAudio, saveVoiceMessage, queueAudio } = require("../generate_audio_files/audio");
+const {
+  selectAudio,
+  selectAudioForReminder,
+  selectAudioForSpeak,
+  queueVoiceAudio,
+  saveVoiceMessage,
+  queueAudio,
+} = require("../generate_audio_files/audio");
 const {
   getMexcSymbolDetails,
   formatMexcDetails,
@@ -22,8 +29,8 @@ if (!token) {
 }
 
 // Silence all console logs and errors to prevent PM2 log bloating
-console.log = () => {};
-console.error = () => {};
+// console.log = () => {};
+// console.error = () => {};
 
 // Bot initialize with polling enabled so it can receive messages
 const bot = new TelegramBot(token, { polling: true });
@@ -188,7 +195,7 @@ bot.onText(/\/reminder/, async (msg) => {
   return bot.sendMessage(
     chatId,
     "⏰ **Set Reminder (Step 1 of 2):**\n\nPlease enter the reminder note/message (e.g., *Meeting with team*, *Buy groceries*):",
-    { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    { parse_mode: "Markdown", reply_markup: mainKeyboard },
   );
 });
 
@@ -199,7 +206,7 @@ bot.onText(/\/voicereminder/, async (msg) => {
   return bot.sendMessage(
     chatId,
     "🎙️ **Set Voice Reminder (Step 1 of 2):**\n\nPlease record and send your voice note/message now:",
-    { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    { parse_mode: "Markdown", reply_markup: mainKeyboard },
   );
 });
 
@@ -208,14 +215,14 @@ bot.onText(/\/reminders/, async (msg) => {
   const chatId = msg.chat.id;
   userStates[chatId] = null;
   await sendRemindersList(chatId);
-});// Handle /speak
+}); // Handle /speak
 bot.onText(/\/speak/, async (msg) => {
   const chatId = msg.chat.id;
   userStates[chatId] = { action: "speak_text" };
   return bot.sendMessage(
     chatId,
     "🗣️ **Speak Message:**\n\nPlease type the text message you want me to convert to speech and stream immediately:",
-    { parse_mode: "Markdown", reply_markup: mainKeyboard }
+    { parse_mode: "Markdown", reply_markup: mainKeyboard },
   );
 });
 
@@ -224,12 +231,15 @@ bot.onText(/\/(clearqueue|resetqueue)/, async (msg) => {
   const chatId = msg.chat.id;
   userStates[chatId] = null;
   clearAudioQueue();
-  return bot.sendMessage(chatId, "🧹 **Audio Stream Queue has been cleared successfully!**", {
-    parse_mode: "Markdown",
-    reply_markup: mainKeyboard
-  });
+  return bot.sendMessage(
+    chatId,
+    "🧹 **Audio Stream Queue has been cleared successfully!**",
+    {
+      parse_mode: "Markdown",
+      reply_markup: mainKeyboard,
+    },
+  );
 });
-
 
 bot.onText(/\/start|\/help/, async (msg) => {
   const chatId = msg.chat.id;
@@ -500,7 +510,8 @@ async function sendRemindersList(chatId, messageId = null) {
   const reminders = readReminders().filter((r) => r.chatId === chatId);
 
   if (reminders.length === 0) {
-    const text = "ℹ️ You don't have any active reminders. Use `⏰ Set Reminder` to create one.";
+    const text =
+      "ℹ️ You don't have any active reminders. Use `⏰ Set Reminder` to create one.";
     const opts = { parse_mode: "Markdown", reply_markup: mainKeyboard };
     if (messageId) {
       return bot.editMessageText(text, {
@@ -517,16 +528,27 @@ async function sendRemindersList(chatId, messageId = null) {
   const keyboard = [];
 
   reminders.forEach((reminder, idx) => {
-    const timeStr = new Date(reminder.time).toLocaleString("en-GB", { hour12: false });
+    const timeStr = new Date(reminder.time).toLocaleString("en-GB", {
+      hour12: false,
+    });
     responseText +=
       `⏰ *${idx + 1}.* Note: *${reminder.note}*\n` +
       `   ├ Time: \`${timeStr}\`\n` +
       `   └ ID: \`${reminder.id}\`\n\n`;
 
     keyboard.push([
-      { text: `✏️ Note #${idx + 1}`, callback_data: `editrem_note_${reminder.id}` },
-      { text: `📅 Time #${idx + 1}`, callback_data: `editrem_time_${reminder.id}` },
-      { text: `❌ Delete #${idx + 1}`, callback_data: `deleterem_${reminder.id}` },
+      {
+        text: `✏️ Note #${idx + 1}`,
+        callback_data: `editrem_note_${reminder.id}`,
+      },
+      {
+        text: `📅 Time #${idx + 1}`,
+        callback_data: `editrem_time_${reminder.id}`,
+      },
+      {
+        text: `❌ Delete #${idx + 1}`,
+        callback_data: `deleterem_${reminder.id}`,
+      },
     ]);
   });
 
@@ -553,7 +575,6 @@ async function sendRemindersList(chatId, messageId = null) {
     await bot.sendMessage(chatId, responseText, opts);
   }
 }
-
 
 // Handle /delete <id>
 bot.onText(/\/delete(?:\s+(\S+))?/, async (msg, match) => {
@@ -821,9 +842,13 @@ bot.on("callback_query", async (callbackQuery) => {
       // Refresh list
       await sendRemindersList(chatId, messageId);
     } else {
-      await bot.sendMessage(chatId, "❌ Reminder not found or already deleted.", {
-        reply_markup: mainKeyboard,
-      });
+      await bot.sendMessage(
+        chatId,
+        "❌ Reminder not found or already deleted.",
+        {
+          reply_markup: mainKeyboard,
+        },
+      );
     }
   } else if (data.startsWith("editrem_note_")) {
     const reminderId = data.substring(13);
@@ -861,7 +886,9 @@ bot.on("callback_query", async (callbackQuery) => {
         action: "edit_reminder_time",
         reminderId: reminder.id,
       };
-      const currentFormatted = new Date(reminder.time).toLocaleString("en-GB", { hour12: false });
+      const currentFormatted = new Date(reminder.time).toLocaleString("en-GB", {
+        hour12: false,
+      });
       await bot.sendMessage(
         chatId,
         `📅 **Editing Time for Reminder**\n` +
@@ -1135,7 +1162,7 @@ bot.on("message", async (msg) => {
     return bot.sendMessage(
       chatId,
       "⏰ **Set Reminder (Step 1 of 2):**\n\nPlease enter the reminder note/message (e.g., *Meeting with team*, *Buy groceries*):",
-      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      { parse_mode: "Markdown", reply_markup: mainKeyboard },
     );
   }
 
@@ -1144,7 +1171,7 @@ bot.on("message", async (msg) => {
     return bot.sendMessage(
       chatId,
       "🎙️ **Set Voice Reminder (Step 1 of 2):**\n\nPlease record and send your voice note/message now:",
-      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      { parse_mode: "Markdown", reply_markup: mainKeyboard },
     );
   }
 
@@ -1158,7 +1185,7 @@ bot.on("message", async (msg) => {
     return bot.sendMessage(
       chatId,
       "🗣️ **Speak Message:**\n\nPlease type the text message you want me to convert to speech and stream immediately:",
-      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      { parse_mode: "Markdown", reply_markup: mainKeyboard },
     );
   }
 
@@ -1168,7 +1195,7 @@ bot.on("message", async (msg) => {
     return bot.sendMessage(
       chatId,
       "🧹 **Audio Stream Queue has been cleared successfully!**",
-      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      { parse_mode: "Markdown", reply_markup: mainKeyboard },
     );
   }
 
@@ -1189,18 +1216,28 @@ bot.on("message", async (msg) => {
       return bot.sendMessage(
         chatId,
         "⚠️ Please enter some text for me to speak:",
-        { reply_markup: mainKeyboard }
+        { reply_markup: mainKeyboard },
       );
     }
     userStates[chatId] = null; // Clear state
-    bot.sendMessage(chatId, "🗣️ Generating audio and sending to stream queue...", { reply_markup: mainKeyboard });
+    bot.sendMessage(
+      chatId,
+      "🗣️ Generating audio and sending to stream queue...",
+      { reply_markup: mainKeyboard },
+    );
 
     try {
-      await selectAudioForSpeak(text, "hi"); // Use Hindi TTS which handles mixed Hinglish beautifully
-      return bot.sendMessage(chatId, "✅ Sent to stream queue!", { reply_markup: mainKeyboard });
+      await selectAudioForSpeak(text, "en"); // Use Hindi TTS which handles mixed Hinglish beautifully
+      return bot.sendMessage(chatId, "✅ Sent to stream queue!", {
+        reply_markup: mainKeyboard,
+      });
     } catch (e) {
       console.error("Error generating speak audio:", e);
-      return bot.sendMessage(chatId, `❌ Failed to generate audio: ${e.message}`, { reply_markup: mainKeyboard });
+      return bot.sendMessage(
+        chatId,
+        `❌ Failed to generate audio: ${e.message}`,
+        { reply_markup: mainKeyboard },
+      );
     }
   }
 
@@ -1211,11 +1248,15 @@ bot.on("message", async (msg) => {
         chatId,
         "⚠️ **Please record and send a voice note/message.**\n" +
           "If you want to cancel, please click any button on the bottom menu.",
-        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
       );
     }
 
-    bot.sendMessage(chatId, "🎙️ Voice note received. Downloading and preparing your reminder...", { reply_markup: mainKeyboard });
+    bot.sendMessage(
+      chatId,
+      "🎙️ Voice note received. Downloading and preparing your reminder...",
+      { reply_markup: mainKeyboard },
+    );
 
     try {
       const fileId = voice.file_id;
@@ -1227,7 +1268,7 @@ bot.on("message", async (msg) => {
         action: "add_reminder_time",
         type: "voice",
         filePath: savedPath,
-        note: "[Voice Reminder]"
+        note: "[Voice Reminder]",
       };
 
       return bot.sendMessage(
@@ -1235,14 +1276,14 @@ bot.on("message", async (msg) => {
         `🎙️ **Set Voice Reminder (Step 2 of 2):**\n\n` +
           `✅ Voice message prepared successfully!\n\n` +
           `Please enter the *date & time* in format \`DD-MM-YYYY HH:MM\` (e.g., \`14-06-2026 15:30\`):`,
-        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
       );
     } catch (err) {
       console.error("Error setting voice reminder:", err);
       return bot.sendMessage(
         chatId,
         `❌ Failed to process voice note: ${err.message}`,
-        { reply_markup: mainKeyboard }
+        { reply_markup: mainKeyboard },
       );
     }
   }
@@ -1252,19 +1293,19 @@ bot.on("message", async (msg) => {
       return bot.sendMessage(
         chatId,
         "⚠️ Please enter a valid non-empty note/message for the reminder:",
-        { reply_markup: mainKeyboard }
+        { reply_markup: mainKeyboard },
       );
     }
     userStates[chatId] = {
       action: "add_reminder_time",
-      note: text
+      note: text,
     };
     return bot.sendMessage(
       chatId,
       `⏰ **Set Reminder (Step 2 of 2):**\n\n` +
         `📌 Note: *${text}*\n\n` +
         `Please enter the *date & time* in format \`DD-MM-YYYY HH:MM\` (e.g., \`14-06-2026 15:30\`):`,
-      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      { parse_mode: "Markdown", reply_markup: mainKeyboard },
     );
   }
 
@@ -1277,7 +1318,7 @@ bot.on("message", async (msg) => {
         chatId,
         "⚠️ **Invalid format!** Please use the format `DD-MM-YYYY HH:MM`.\n" +
           "Example: `14-06-2026 18:30`",
-        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
       );
     }
 
@@ -1288,14 +1329,14 @@ bot.on("message", async (msg) => {
       parseInt(day),
       parseInt(hour),
       parseInt(minute),
-      0
+      0,
     );
 
     if (isNaN(reminderDate.getTime())) {
       return bot.sendMessage(
         chatId,
         "⚠️ **Invalid Date!** Please check your date and time values.",
-        { reply_markup: mainKeyboard }
+        { reply_markup: mainKeyboard },
       );
     }
 
@@ -1306,7 +1347,7 @@ bot.on("message", async (msg) => {
         `⚠️ **Time must be in the future!**\n` +
           `Selected time: *${text}*\n` +
           `Current time: *${now.toLocaleString("en-GB")}*`,
-        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
       );
     }
 
@@ -1319,7 +1360,7 @@ bot.on("message", async (msg) => {
       filePath: state.filePath || null,
       note,
       time: reminderDate.toISOString(),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
     reminders.push(newReminder);
     writeReminders(reminders);
@@ -1333,7 +1374,7 @@ bot.on("message", async (msg) => {
       `✅ **Reminder set successfully!**\n\n` +
         `📌 **Note:** *${displayNote}*\n` +
         `📅 **Time:** *${text}*`,
-      { parse_mode: "Markdown", reply_markup: mainKeyboard }
+      { parse_mode: "Markdown", reply_markup: mainKeyboard },
     );
   }
 
@@ -1353,7 +1394,7 @@ bot.on("message", async (msg) => {
         `✅ **Reminder note updated successfully!**\n\n` +
           `Old Note: *${oldNote}*\n` +
           `New Note: *${text}*`,
-        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
       );
     } else {
       userStates[chatId] = null;
@@ -1376,7 +1417,7 @@ bot.on("message", async (msg) => {
           chatId,
           "⚠️ **Invalid format!** Please enter date & time in `DD-MM-YYYY HH:MM`.\n" +
             "Example: `14-06-2026 18:30`",
-          { parse_mode: "Markdown", reply_markup: mainKeyboard }
+          { parse_mode: "Markdown", reply_markup: mainKeyboard },
         );
       }
 
@@ -1387,14 +1428,14 @@ bot.on("message", async (msg) => {
         parseInt(day),
         parseInt(hour),
         parseInt(minute),
-        0
+        0,
       );
 
       if (isNaN(reminderDate.getTime())) {
         return bot.sendMessage(
           chatId,
           "⚠️ **Invalid Date!** Please check the values.",
-          { reply_markup: mainKeyboard }
+          { reply_markup: mainKeyboard },
         );
       }
 
@@ -1405,11 +1446,13 @@ bot.on("message", async (msg) => {
           `⚠️ **Time must be in the future!**\n` +
             `Selected time: *${text}*\n` +
             `Current time: *${now.toLocaleString("en-GB")}*`,
-          { parse_mode: "Markdown", reply_markup: mainKeyboard }
+          { parse_mode: "Markdown", reply_markup: mainKeyboard },
         );
       }
 
-      const oldTimeStr = new Date(reminder.time).toLocaleString("en-GB", { hour12: false });
+      const oldTimeStr = new Date(reminder.time).toLocaleString("en-GB", {
+        hour12: false,
+      });
       reminder.time = reminderDate.toISOString();
       writeReminders(reminders);
       userStates[chatId] = null;
@@ -1420,7 +1463,7 @@ bot.on("message", async (msg) => {
           `📌 Note: *${reminder.note}*\n` +
           `Old Time: *${oldTimeStr}*\n` +
           `New Time: *${text}*`,
-        { parse_mode: "Markdown", reply_markup: mainKeyboard }
+        { parse_mode: "Markdown", reply_markup: mainKeyboard },
       );
     } else {
       userStates[chatId] = null;
@@ -1732,7 +1775,11 @@ async function monitorMarket() {
 
           // Generate audio like mail_reads
           try {
-            await selectAudio("crypto", { coin: trigger.symbol, price: currentPrice }, "hi");
+            await selectAudio(
+              "crypto",
+              { coin: trigger.symbol, price: currentPrice },
+              "en",
+            );
           } catch (audioError) {
             console.error("Error generating audio alert:", audioError.message);
           }
@@ -1772,9 +1819,14 @@ async function monitorReminders() {
               parse_mode: "Markdown",
               reply_markup: mainKeyboard,
             });
-            console.log(`Reminder sent for note "${reminder.note}" to chatId ${reminder.chatId}`);
+            console.log(
+              `Reminder sent for note "${reminder.note}" to chatId ${reminder.chatId}`,
+            );
           } catch (error) {
-            console.error(`Error sending telegram reminder to ${reminder.chatId}:`, error.message);
+            console.error(
+              `Error sending telegram reminder to ${reminder.chatId}:`,
+              error.message,
+            );
           }
 
           // Generate audio for reminder
@@ -1782,10 +1834,16 @@ async function monitorReminders() {
             if (reminder.type === "voice" && reminder.filePath) {
               queueAudio("reminder", reminder.filePath);
             } else {
-              await selectAudioForReminder(`सर, यह आपका रिमांडर है: ${reminder.note}`, "hi");
+              await selectAudioForReminder(
+                `Hello sir, You reminder is: ${reminder.note}`,
+                "en",
+              );
             }
           } catch (audioError) {
-            console.error("Error generating reminder audio alert:", audioError.message);
+            console.error(
+              "Error generating reminder audio alert:",
+              audioError.message,
+            );
           }
         } else {
           remainingReminders.push(reminder);
@@ -1805,16 +1863,17 @@ async function monitorReminders() {
 }
 
 // Start the monitoring engines
-console.log(
-  "Price monitoring and reminders engines started.",
-);
+console.log("Price monitoring and reminders engines started.");
 monitorMarket();
 monitorReminders();
 
 // Listen for voice messages
 bot.on("voice", async (msg) => {
   const chatId = msg.chat.id;
-  if (userStates[chatId] && userStates[chatId].action === "add_voice_reminder_file") {
+  if (
+    userStates[chatId] &&
+    userStates[chatId].action === "add_voice_reminder_file"
+  ) {
     return; // Ignored globally so conversational wizard handles it
   }
   const fileId = msg.voice.file_id;
@@ -1824,7 +1883,10 @@ bot.on("voice", async (msg) => {
 // Listen for audio messages
 bot.on("audio", async (msg) => {
   const chatId = msg.chat.id;
-  if (userStates[chatId] && userStates[chatId].action === "add_voice_reminder_file") {
+  if (
+    userStates[chatId] &&
+    userStates[chatId].action === "add_voice_reminder_file"
+  ) {
     return; // Ignored globally so conversational wizard handles it
   }
   const fileId = msg.audio.file_id;
@@ -1832,14 +1894,26 @@ bot.on("audio", async (msg) => {
 });
 
 async function handleIncomingAudioFile(chatId, fileId) {
-  bot.sendMessage(chatId, "🎙️ Voice note received. Downloading and preparing stream...", { reply_markup: mainKeyboard });
+  bot.sendMessage(
+    chatId,
+    "🎙️ Voice note received. Downloading and preparing stream...",
+    { reply_markup: mainKeyboard },
+  );
   try {
     const fileLink = await bot.getFileLink(fileId);
     console.log(`[Bot] Download link for voice message: ${fileLink}`);
     await queueVoiceAudio(fileLink);
-    await bot.sendMessage(chatId, "✅ Voice note successfully prepared and added to stream queue!", { reply_markup: mainKeyboard });
+    await bot.sendMessage(
+      chatId,
+      "✅ Voice note successfully prepared and added to stream queue!",
+      { reply_markup: mainKeyboard },
+    );
   } catch (e) {
     console.error("Error processing voice message:", e);
-    await bot.sendMessage(chatId, `❌ Failed to process voice note: ${e.message}`, { reply_markup: mainKeyboard });
+    await bot.sendMessage(
+      chatId,
+      `❌ Failed to process voice note: ${e.message}`,
+      { reply_markup: mainKeyboard },
+    );
   }
 }
