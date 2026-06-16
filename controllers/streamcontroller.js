@@ -24,15 +24,17 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
     };
     res.writeHead(200, headers);
 
-    // Throttling configuration matching the playback rate
+    // Throttling configuration with pre-fill burst
     let chunkSize;
     const intervalMs = 100; // Send chunks every 100ms
+    const initialBurstSize = 16384; // 16KB initial burst to fill the ESP32 buffer instantly
+
     if (ext === ".wav") {
-      // 16kHz 16-bit mono WAV = 32,000 bytes/sec -> 3200 bytes per 100ms
-      chunkSize = 3200;
+      // WAV playback is 32 KB/s. Throttle at 64 KB/s (6400 bytes per 100ms) to keep buffer full.
+      chunkSize = 6400;
     } else {
-      // 64kbps MP3 = 8,000 bytes/sec -> send 1000 bytes per 100ms (slightly faster to avoid buffer underflow)
-      chunkSize = 1000;
+      // MP3 playback is 8 KB/s. Throttle at 20 KB/s (2000 bytes per 100ms) to keep buffer full.
+      chunkSize = 2000;
     }
 
     let offset = 0;
@@ -51,7 +53,9 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
         return;
       }
 
-      const end = Math.min(offset + chunkSize, fileBuffer.length);
+      // Determine size to send: burst for the first chunk, then standard chunk size
+      const currentChunkSize = (offset === 0) ? Math.min(initialBurstSize, fileBuffer.length) : chunkSize;
+      const end = Math.min(offset + currentChunkSize, fileBuffer.length);
       const chunk = fileBuffer.slice(offset, end);
       res.write(chunk);
       offset = end;
