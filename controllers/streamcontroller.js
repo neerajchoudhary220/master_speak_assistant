@@ -12,42 +12,31 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
     const ext = path.extname(filePath).toLowerCase();
     const contentType = ext === ".wav" ? "audio/wav" : "audio/mpeg";
 
-    // 1. Add silence padding to prevent premature termination by ESP32 library
-    // and allow sending Content-Length to avoid chunked transfer encoding (which corrupts streams).
-    let paddingBuffer;
-    if (ext === ".wav") {
-      // 2 seconds of silence padding for WAV (16kHz 16-bit mono = 32 KB/s)
-      paddingBuffer = Buffer.alloc(64000); 
-    } else {
-      // 2 seconds of silence padding for MP3 (assume 64kbps = 8 KB/s)
-      paddingBuffer = Buffer.alloc(16000);
-    }
-    
-    // Combine file buffer and padding buffer
-    const paddedBuffer = Buffer.concat([fileBuffer, paddingBuffer]);
-
+    // Use Transfer-Encoding: identity to force sending raw binary data without Chunked framing.
+    // Omit Content-Length to bypass the ESP32 library's premature closing bug.
     const headers = {
       "Content-Type": contentType,
-      "Content-Length": paddedBuffer.length.toString(),
+      "Transfer-Encoding": "identity",
+      "Connection": "close",
       "Accept-Ranges": "bytes",
       "Cache-Control": "no-cache",
       ...extraHeaders
     };
     res.writeHead(200, headers);
 
-    // Send the entire padded buffer at once
-    res.write(paddedBuffer);
+    // Send the entire buffer at once
+    res.write(fileBuffer);
 
-    // Calculate a safe hold-open duration based on padded audio type
+    // Calculate a safe hold-open duration based on audio type
     let estimatedDurationMs;
     if (ext === ".wav") {
       // 16kHz 16-bit Mono WAV has a data rate of 32 KB/s
-      estimatedDurationMs = Math.ceil((paddedBuffer.length / 32000) * 1000) + 1500;
+      estimatedDurationMs = Math.ceil((fileBuffer.length / 32000) * 1000) + 3000;
     } else {
       // Assume 64kbps MP3 (8 KB/s)
-      estimatedDurationMs = Math.ceil((paddedBuffer.length / 8000) * 1000) + 2000;
+      estimatedDurationMs = Math.ceil((fileBuffer.length / 8000) * 1000) + 4000;
     }
-    estimatedDurationMs = Math.max(5000, estimatedDurationMs);
+    estimatedDurationMs = Math.max(6000, estimatedDurationMs);
 
     // Keep connection open to let the ESP32 play the buffer fully before closing
     const timeoutId = setTimeout(() => {
