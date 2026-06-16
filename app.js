@@ -2,6 +2,9 @@
 console.log = () => {};
 console.error = () => {};
 
+const dns = require("dns");
+dns.setDefaultResultOrder("ipv4first");
+
 const { logError } = require("./utils/logger");
 
 process.on("uncaughtException", (error) => {
