@@ -18,6 +18,7 @@ process.on("unhandledRejection", (reason) => {
 const express = require("express");
 const app = express();
 const streamRouter = require("./routes/streamRoute");
+const dashboardRouter = require("./routes/dashboardRoute");
 const http = require("http");
 const WebSocket = require("ws");
 const os = require("os");
@@ -34,6 +35,12 @@ app.use((req, res, next) => {
 });
 
 app.use("/api", streamRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
