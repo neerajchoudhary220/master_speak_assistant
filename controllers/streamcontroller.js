@@ -9,10 +9,9 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
     const stat = fs.statSync(filePath);
     const fileBuffer = fs.readFileSync(filePath);
     
-    // Set Content-Length and other headers
+    // Set headers WITHOUT Content-Length to prevent premature stream termination
     const headers = {
       "Content-Type": "audio/mpeg",
-      "Content-Length": fileBuffer.length,
       "Accept-Ranges": "bytes",
       "Cache-Control": "no-cache",
       ...extraHeaders
