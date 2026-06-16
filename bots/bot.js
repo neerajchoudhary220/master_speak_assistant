@@ -36,7 +36,11 @@ console.log = () => {};
 console.error = () => {};
 
 // Bot initialize with polling enabled so it can receive messages
-const bot = new TelegramBot(token, { polling: true });
+const botOptions = { polling: true };
+if (process.env.TELEGRAM_BASE_API_URL) {
+  botOptions.baseApiUrl = process.env.TELEGRAM_BASE_API_URL;
+}
+const bot = new TelegramBot(token, botOptions);
 
 bot.on("polling_error", (error) => {
   logError(error, "Telegram polling_error");
