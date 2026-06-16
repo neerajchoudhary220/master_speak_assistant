@@ -9,9 +9,12 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
     const stat = fs.statSync(filePath);
     const fileBuffer = fs.readFileSync(filePath);
     
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = ext === ".wav" ? "audio/wav" : "audio/mpeg";
+
     // Set headers WITHOUT Content-Length to prevent premature stream termination
     const headers = {
-      "Content-Type": "audio/mpeg",
+      "Content-Type": contentType,
       "Accept-Ranges": "bytes",
       "Cache-Control": "no-cache",
       ...extraHeaders
@@ -21,9 +24,16 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
     // Send the entire buffer at once
     res.write(fileBuffer);
 
-    // Calculate a safe hold-open duration: at least 6 seconds, or longer for larger files
-    // Assuming a minimum bitrate of 32 kbps (4 KB/s), duration is size / 4000
-    const estimatedDurationMs = Math.max(6000, Math.ceil((fileBuffer.length / 4000) * 1000) + 2000);
+    // Calculate a safe hold-open duration based on audio type
+    let estimatedDurationMs;
+    if (ext === ".wav") {
+      // 16kHz 16-bit Mono WAV has a data rate of 32 KB/s
+      estimatedDurationMs = Math.ceil((fileBuffer.length / 32000) * 1000) + 3000;
+    } else {
+      // Assume 64kbps MP3 (8 KB/s)
+      estimatedDurationMs = Math.ceil((fileBuffer.length / 8000) * 1000) + 4000;
+    }
+    estimatedDurationMs = Math.max(6000, estimatedDurationMs);
 
     // Keep connection open to let the ESP32 play the buffer fully before closing
     const timeoutId = setTimeout(() => {
@@ -46,7 +56,7 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
 
 // In-memory cache to handle browser Range/multiple requests for the same audio
 let lastServed = null;
-const CACHE_DURATION_MS = 3000; // 3 seconds cache duration
+const CACHE_DURATION_MS = 3000; // 3 seconds cache duration for general requests
 
 exports.getAudioStream = (req, res) => {
   const queuePath = path.join(__dirname, "..", "assets", "json", "audioQueue.json");
@@ -56,12 +66,13 @@ exports.getAudioStream = (req, res) => {
     const reqId = req.query.id;
     let useCache = false;
 
-    if (lastServed && (Date.now() - lastServed.timestamp < CACHE_DURATION_MS)) {
+    if (lastServed) {
       if (reqId) {
-        // If an ID is requested, only serve cache if it matches
+        // If the client requested a specific ID, serve the cached file as long as it matches
+        // and hasn't been deleted yet (e.g. for reconnects after network dropouts).
         useCache = (lastServed.id === reqId);
-      } else {
-        // Otherwise, default to time-based caching
+      } else if (Date.now() - lastServed.timestamp < CACHE_DURATION_MS) {
+        // Default time-based cache for requests without an ID query
         useCache = true;
       }
     }
@@ -69,15 +80,19 @@ exports.getAudioStream = (req, res) => {
     if (useCache) {
       const cachedFilePath = lastServed.filePath;
       if (fs.existsSync(cachedFilePath)) {
-        res.setHeader("X-Audio-Category", lastServed.category);
-        res.setHeader("X-Audio-Priority", lastServed.priority.toString());
-        res.setHeader("X-Audio-Cached", "true");
+        // Update cached stream's timestamp to keep it alive during active streaming
+        lastServed.timestamp = Date.now();
 
-        res.sendFile(cachedFilePath, (err) => {
-          if (err && !res.headersSent) {
-            console.error(`Error sending cached audio file ${cachedFilePath}:`, err);
+        sendThrottledFile(
+          cachedFilePath,
+          res,
+          req,
+          {
+            "X-Audio-Category": lastServed.category,
+            "X-Audio-Priority": lastServed.priority.toString(),
+            "X-Audio-Cached": "true"
           }
-        });
+        );
         return;
       }
     }
