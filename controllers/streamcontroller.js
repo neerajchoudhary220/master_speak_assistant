@@ -4,6 +4,68 @@ const path = require("path");
 // Track active streaming response to allow immediate cancellation/stopping of audio
 let activeResponse = null;
 
+const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = null) => {
+  try {
+    const stat = fs.statSync(filePath);
+    const headers = {
+      "Content-Type": "audio/mpeg",
+      "Content-Length": stat.size,
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "no-cache",
+      ...extraHeaders
+    };
+    res.writeHead(200, headers);
+
+    const fileBuffer = fs.readFileSync(filePath);
+    const totalLength = fileBuffer.length;
+
+    // Send the first 12KB (or the entire file if smaller) immediately
+    const initialBurstSize = Math.min(12288, totalLength);
+    res.write(fileBuffer.slice(0, initialBurstSize));
+
+    if (initialBurstSize >= totalLength) {
+      // Keep connection open for 4 seconds after sending all data
+      const timeoutId = setTimeout(() => {
+        res.end();
+        if (onComplete) onComplete();
+      }, 4000);
+      req.on("close", () => {
+        clearTimeout(timeoutId);
+      });
+      return;
+    }
+
+    let offset = initialBurstSize;
+    const chunkSize = 4096;
+    const intervalId = setInterval(() => {
+      if (offset < totalLength) {
+        const nextChunkSize = Math.min(chunkSize, totalLength - offset);
+        res.write(fileBuffer.slice(offset, offset + nextChunkSize));
+        offset += nextChunkSize;
+      } else {
+        clearInterval(intervalId);
+        // Keep connection open for 4 seconds after sending all data
+        const timeoutId = setTimeout(() => {
+          res.end();
+          if (onComplete) onComplete();
+        }, 4000);
+        req.on("close", () => {
+          clearTimeout(timeoutId);
+        });
+      }
+    }, 400);
+
+    req.on("close", () => {
+      clearInterval(intervalId);
+    });
+  } catch (err) {
+    console.error("Throttled file streaming error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "error streaming audio file" });
+    }
+  }
+};
+
 // In-memory cache to handle browser Range/multiple requests for the same audio
 let lastServed = null;
 const CACHE_DURATION_MS = 3000; // 3 seconds cache duration
@@ -96,41 +158,34 @@ exports.getAudioStream = (req, res) => {
           }, 1500);
         }
 
-        // Set custom headers
-        res.setHeader("X-Audio-Category", audioItem.category);
-        res.setHeader("X-Audio-Priority", audioItem.priority.toString());
-
         // Track active streaming response
         activeResponse = res;
 
-        // Send the file and delete after 30 seconds delay
-        res.sendFile(filePath, (err) => {
-          if (activeResponse === res) {
-            activeResponse = null;
-          }
-          if (err) {
-            console.error(`Error sending audio file ${filePath}:`, err);
-            if (!res.headersSent) {
-              res.status(500).json({ message: "error streaming audio file" });
+        // Send the file with throttling to prevent ESP32 from closing connection early
+        sendThrottledFile(
+          filePath,
+          res,
+          req,
+          {
+            "X-Audio-Category": audioItem.category,
+            "X-Audio-Priority": audioItem.priority.toString()
+          },
+          () => {
+            if (activeResponse === res) {
+              activeResponse = null;
             }
           }
+        );
 
-          // Delete file after 30 seconds to allow complete transmission/buffering
-          setTimeout(() => {
-            if (fs.existsSync(filePath)) {
-              fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) console.error(`Failed to delete processed audio file ${filePath}:`, unlinkErr);
-                else console.log(`Deleted processed audio file after delay: ${filePath}`);
-              });
-            }
-          }, 30000); // 30 seconds delay
-        });
-
-        req.on("close", () => {
-          if (activeResponse === res) {
-            activeResponse = null;
+        // Delete file after 30 seconds to allow complete transmission/buffering
+        setTimeout(() => {
+          if (fs.existsSync(filePath)) {
+            fs.unlink(filePath, (unlinkErr) => {
+              if (unlinkErr) console.error(`Failed to delete processed audio file ${filePath}:`, unlinkErr);
+              else console.log(`Deleted processed audio file after delay: ${filePath}`);
+            });
           }
-        });
+        }, 30000); // 30 seconds delay
 
         return; // Stream started, response is handled
       } else {
@@ -232,12 +287,7 @@ exports.clearQueueAndStop = clearQueueAndStop;
 exports.getConnectAudio = (req, res) => {
   const filePath = path.join(__dirname, "..", "assets", "audio", "connect.mp3");
   if (fs.existsSync(filePath)) {
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.sendFile(filePath, (err) => {
-      if (err && !res.headersSent) {
-        console.error("Error sending connect.mp3:", err);
-      }
-    });
+    sendThrottledFile(filePath, res, req);
   } else {
     res.status(404).json({ message: "connect.mp3 not found" });
   }
@@ -246,12 +296,7 @@ exports.getConnectAudio = (req, res) => {
 exports.getTestAudio = (req, res) => {
   const filePath = path.join(__dirname, "..", "assets", "audio", "test.mp3");
   if (fs.existsSync(filePath)) {
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.sendFile(filePath, (err) => {
-      if (err && !res.headersSent) {
-        console.error("Error sending test.mp3:", err);
-      }
-    });
+    sendThrottledFile(filePath, res, req);
   } else {
     res.status(404).json({ message: "test.mp3 not found" });
   }
