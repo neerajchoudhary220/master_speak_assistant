@@ -24,30 +24,48 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
     };
     res.writeHead(200, headers);
 
-    // Send the entire buffer at once
-    res.write(fileBuffer);
-
-    // Calculate a safe hold-open duration based on audio type
-    let estimatedDurationMs;
+    // Throttling configuration matching the playback rate
+    let chunkSize;
+    const intervalMs = 100; // Send chunks every 100ms
     if (ext === ".wav") {
-      // 16kHz 16-bit Mono WAV has a data rate of 32 KB/s
-      estimatedDurationMs = Math.ceil((fileBuffer.length / 32000) * 1000) + 3000;
+      // 16kHz 16-bit mono WAV = 32,000 bytes/sec -> 3200 bytes per 100ms
+      chunkSize = 3200;
     } else {
-      // Assume 64kbps MP3 (8 KB/s)
-      estimatedDurationMs = Math.ceil((fileBuffer.length / 8000) * 1000) + 4000;
+      // 64kbps MP3 = 8,000 bytes/sec -> send 1000 bytes per 100ms (slightly faster to avoid buffer underflow)
+      chunkSize = 1000;
     }
-    estimatedDurationMs = Math.max(6000, estimatedDurationMs);
 
-    // Keep connection open to let the ESP32 play the buffer fully before closing
-    const timeoutId = setTimeout(() => {
-      try {
-        res.end();
-      } catch (e) {}
-      if (onComplete) onComplete();
-    }, estimatedDurationMs);
+    let offset = 0;
+    let timeoutId = null;
+
+    const sendChunk = () => {
+      if (offset >= fileBuffer.length) {
+        clearInterval(intervalId);
+        // Wait 3.5 seconds after sending the last chunk to let the ESP32 finish playing its buffer
+        timeoutId = setTimeout(() => {
+          try {
+            res.end();
+          } catch (e) {}
+          if (onComplete) onComplete();
+        }, 3500);
+        return;
+      }
+
+      const end = Math.min(offset + chunkSize, fileBuffer.length);
+      const chunk = fileBuffer.slice(offset, end);
+      res.write(chunk);
+      offset = end;
+    };
+
+    // Send the first chunk immediately
+    sendChunk();
+
+    // Set up the interval for subsequent chunks
+    const intervalId = setInterval(sendChunk, intervalMs);
 
     req.on("close", () => {
-      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+      if (timeoutId) clearTimeout(timeoutId);
     });
   } catch (err) {
     console.error("File streaming error:", err);
