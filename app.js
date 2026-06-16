@@ -2,6 +2,16 @@
 console.log = () => {};
 console.error = () => {};
 
+const { logError } = require("./utils/logger");
+
+process.on("uncaughtException", (error) => {
+  logError(error, "UncaughtException");
+});
+
+process.on("unhandledRejection", (reason) => {
+  logError(reason, "UnhandledRejection");
+});
+
 const express = require("express");
 const app = express();
 const streamRouter = require("./routes/streamRoute");

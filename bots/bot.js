@@ -1,6 +1,7 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const TelegramBot = require("node-telegram-bot-api");
+const { logError } = require("../utils/logger");
 const fs = require("fs");
 const {
   selectAudio,
@@ -36,11 +37,11 @@ console.error = () => {};
 const bot = new TelegramBot(token, { polling: true });
 
 bot.on("polling_error", (error) => {
-  console.error("Telegram polling error:", error);
+  logError(error, "Telegram polling_error");
 });
 
 bot.on("error", (error) => {
-  console.error("Telegram general error:", error);
+  logError(error, "Telegram general_error");
 });
 
 // User conversation states
@@ -727,7 +728,8 @@ bot.onText(
 // ─── CALLBACK QUERY HANDLER (Buttons) ──────────────────────────────────────────
 
 bot.on("callback_query", async (callbackQuery) => {
-  const chatId = callbackQuery.message.chat.id;
+  try {
+    const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
   const data = callbackQuery.data;
 
@@ -1098,12 +1100,16 @@ bot.on("callback_query", async (callbackQuery) => {
       { parse_mode: "Markdown", reply_markup: mainKeyboard },
     );
   }
+  } catch (err) {
+    logError(err, "Telegram callback_query");
+  }
 });
 
 // ─── CONVERSATIONAL WIZARD & KEYBOARD TEXT HANDLER ────────────────────────────
 
 bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
+  try {
+    const chatId = msg.chat.id;
   const text = msg.text ? msg.text.trim() : "";
 
   // Ignore commands handled by bot.onText
@@ -1688,6 +1694,9 @@ bot.on("message", async (msg) => {
     // Show updated favorites menu
     await sendFavoritesMenu(chatId);
   }
+  } catch (err) {
+    logError(err, "Telegram message");
+  }
 });
 
 // Helper function to format and send favorites list
@@ -1801,7 +1810,7 @@ async function monitorMarket() {
       }
     }
   } catch (err) {
-    console.error("Error in monitorMarket loop:", err.message);
+    logError(err, "monitorMarket loop");
   } finally {
     // Check again 10 seconds after this run finishes
     setTimeout(monitorMarket, 10000);
@@ -1863,7 +1872,7 @@ async function monitorReminders() {
       }
     }
   } catch (err) {
-    console.error("Error in monitorReminders loop:", err.message);
+    logError(err, "monitorReminders loop");
   } finally {
     // Check again every 5 seconds
     setTimeout(monitorReminders, 5000);
@@ -1917,7 +1926,7 @@ async function handleIncomingAudioFile(chatId, fileId) {
       { reply_markup: mainKeyboard },
     );
   } catch (e) {
-    console.error("Error processing voice message:", e);
+    logError(e, "handleIncomingAudioFile");
     await bot.sendMessage(
       chatId,
       `❌ Failed to process voice note: ${e.message}`,
