@@ -731,6 +731,8 @@ bot.on("callback_query", async (callbackQuery) => {
   const messageId = callbackQuery.message.message_id;
   const data = callbackQuery.data;
 
+  console.log(`[Bot] Received callback_query from chatId ${chatId}: "${data}"`);
+
   // Acknowledge the callback query
   bot.answerCallbackQuery(callbackQuery.id);
 
@@ -1105,6 +1107,8 @@ bot.on("callback_query", async (callbackQuery) => {
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text ? msg.text.trim() : "";
+
+  console.log(`[Bot] Received message from chatId ${chatId}: "${text}"`);
 
   // Ignore commands handled by bot.onText
   if (text.startsWith("/")) return;
