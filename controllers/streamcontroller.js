@@ -243,4 +243,41 @@ exports.getConnectAudio = (req, res) => {
   }
 };
 
+exports.getTestAudio = (req, res) => {
+  const filePath = path.join(__dirname, "..", "assets", "audio", "test.mp3");
+  if (fs.existsSync(filePath)) {
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.sendFile(filePath, (err) => {
+      if (err && !res.headersSent) {
+        console.error("Error sending test.mp3:", err);
+      }
+    });
+  } else {
+    res.status(404).json({ message: "test.mp3 not found" });
+  }
+};
+
+exports.triggerTestAudio = (req, res) => {
+  try {
+    const filePath = path.join(__dirname, "..", "assets", "audio", "test.mp3");
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: "test.mp3 file not found on server" });
+    }
+    
+    // Import queueAudio from generate_audio_files/audio.js
+    const { queueAudio } = require("../generate_audio_files/audio");
+    
+    // Queue the audio for "speak" category (highest priority)
+    queueAudio("speak", filePath);
+    
+    return res.status(200).json({
+      success: true,
+      message: "Test audio queued and WebSocket broadcast sent successfully."
+    });
+  } catch (error) {
+    console.error("Error triggering test audio:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 
