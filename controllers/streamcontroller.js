@@ -24,52 +24,30 @@ const sendThrottledFile = (filePath, res, req, extraHeaders = {}, onComplete = n
     };
     res.writeHead(200, headers);
 
-    // Throttling configuration with pre-fill burst
-    let chunkSize;
-    const intervalMs = 100; // Send chunks every 100ms
-    const initialBurstSize = 16384; // 16KB initial burst to fill the ESP32 buffer instantly
+    // Send the entire file buffer at once
+    res.write(fileBuffer);
 
+    // Calculate a safe hold-open duration based on audio type
+    let estimatedDurationMs;
     if (ext === ".wav") {
-      // WAV playback is 32 KB/s. Throttle at 64 KB/s (6400 bytes per 100ms) to keep buffer full.
-      chunkSize = 6400;
+      // 16kHz 16-bit Mono WAV has a data rate of 32 KB/s
+      estimatedDurationMs = Math.ceil((fileBuffer.length / 32000) * 1000) + 3000;
     } else {
-      // MP3 playback is 8 KB/s. Throttle at 20 KB/s (2000 bytes per 100ms) to keep buffer full.
-      chunkSize = 2000;
+      // Assume 64kbps MP3 (8 KB/s)
+      estimatedDurationMs = Math.ceil((fileBuffer.length / 8000) * 1000) + 4000;
     }
+    estimatedDurationMs = Math.max(6000, estimatedDurationMs);
 
-    let offset = 0;
-    let timeoutId = null;
-
-    const sendChunk = () => {
-      if (offset >= fileBuffer.length) {
-        clearInterval(intervalId);
-        // Wait 3.5 seconds after sending the last chunk to let the ESP32 finish playing its buffer
-        timeoutId = setTimeout(() => {
-          try {
-            res.end();
-          } catch (e) {}
-          if (onComplete) onComplete();
-        }, 3500);
-        return;
-      }
-
-      // Determine size to send: burst for the first chunk, then standard chunk size
-      const currentChunkSize = (offset === 0) ? Math.min(initialBurstSize, fileBuffer.length) : chunkSize;
-      const end = Math.min(offset + currentChunkSize, fileBuffer.length);
-      const chunk = fileBuffer.slice(offset, end);
-      res.write(chunk);
-      offset = end;
-    };
-
-    // Send the first chunk immediately
-    sendChunk();
-
-    // Set up the interval for subsequent chunks
-    const intervalId = setInterval(sendChunk, intervalMs);
+    // Keep connection open to let the ESP32 play the buffer fully before closing
+    const timeoutId = setTimeout(() => {
+      try {
+        res.end();
+      } catch (e) {}
+      if (onComplete) onComplete();
+    }, estimatedDurationMs);
 
     req.on("close", () => {
-      clearInterval(intervalId);
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
     });
   } catch (err) {
     console.error("File streaming error:", err);
