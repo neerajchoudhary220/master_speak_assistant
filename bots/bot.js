@@ -35,6 +35,14 @@ if (!token) {
 // Bot initialize with polling enabled so it can receive messages
 const bot = new TelegramBot(token, { polling: true });
 
+bot.on("polling_error", (error) => {
+  console.error("Telegram polling error:", error);
+});
+
+bot.on("error", (error) => {
+  console.error("Telegram general error:", error);
+});
+
 // User conversation states
 const userStates = {};
 
